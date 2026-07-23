@@ -134,6 +134,14 @@
     border-radius: 6px;
   }
   .hp { text-align: center; font-size: 18px; letter-spacing: 3px; margin-bottom: 0.5rem; }
+  .cell.threat {
+    background: #F2D7D5;
+    animation: threat-pulse .5s infinite alternate;
+  }
+  @keyframes threat-pulse {
+    from { transform: scale(1); }
+    to   { transform: scale(1.18); }
+  }
   .fever {
     display: none;
     text-align: center;
@@ -632,16 +640,16 @@ const CMD_DEFEND = { key: 'defend', name: '防禦', pat: ['chaka', 'chaka', 'pat
 const CMD_CHARGE = { key: 'charge', name: '衝鋒', pat: ['don', 'don', 'chaka', 'chaka'] };
 const DRUM_TXT = { pata: '啪', pon: '碰', chaka: '恰', don: '咚' };
 const OBSTACLE = {
-  monster: { emoji: '👾', cmd: CMD_ATTACK, win: '⚔️ 打倒怪物！' },
-  rock:    { emoji: '🪨', cmd: CMD_DEFEND, win: '🛡️ 擋住落石！' },
-  boss:    { emoji: '👹', cmd: CMD_CHARGE, win: '💥 衝鋒！打飛大魔王！' },
+  monster: { emoji: '👾', cmd: CMD_ATTACK, hp: 2, win: '⚔️ 打倒怪物！',     hit: '👊 打中了！' },
+  rock:    { emoji: '🪨', cmd: CMD_DEFEND, hp: 1, win: '🛡️ 擋住落石！',     hit: '' },
+  boss:    { emoji: '👹', cmd: CMD_CHARGE, hp: 3, win: '💥 打飛大魔王！',   hit: '💢 大魔王受傷了！' },
 };
 const GOAL = 10;
 
 const MAX_HP = 3;
 let g3 = { running: false, bpm: 88, timer: null, phase: 'idle', bip: 0, cmd: CMD_MARCH,
-           pos: 0, obstacles: {}, combo: 0, fever: false, score: 0, counts: {},
-           slots: [], respStart: 0, hp: MAX_HP };
+           pos: 0, obstacles: {}, obHp: {}, windup: false, combo: 0, fever: false,
+           score: 0, counts: {}, slots: [], respStart: 0, hp: MAX_HP };
 
 function renderHp() {
   $('hp3').textContent = '❤️'.repeat(g3.hp) + '🖤'.repeat(MAX_HP - g3.hp);
@@ -682,6 +690,19 @@ function tickSoft() {
   o.connect(g); g.connect(ctx.destination);
   o.start(); o.stop(ctx.currentTime + 0.06);
 }
+function alarmSound() {
+  if (!ctx) return;
+  [988, 988].forEach((f, i) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    const t0 = ctx.currentTime + i * 0.12;
+    o.type = 'square';
+    o.frequency.value = f;
+    g.gain.setValueAtTime(0.12, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.09);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t0); o.stop(t0 + 0.1);
+  });
+}
 function winSound() {
   if (!ctx) return;
   [392, 523, 659, 784].forEach((f, i) => {
@@ -703,6 +724,7 @@ function renderLane() {
     c.className = 'cell';
     const ob = g3.obstacles[i];
     c.textContent = i === g3.pos ? '🐤' : ob ? OBSTACLE[ob].emoji : i === GOAL ? '🚩' : '';
+    if (ob && g3.windup && i === g3.pos + 1) c.classList.add('threat');
     lane.appendChild(c);
   }
   $('mons3').textContent = Object.keys(g3.obstacles).length;
@@ -720,6 +742,7 @@ function renderChips() {
 const chipEls = () => [...$('chips').children];
 
 function requiredCmd() {
+  if (g3.windup) return CMD_DEFEND;   // 怪物蓄力中 → 這回合要防禦
   const ob = g3.obstacles[g3.pos + 1];
   return ob ? OBSTACLE[ob].cmd : CMD_MARCH;
 }
@@ -729,7 +752,10 @@ function startCall(now) {
   g3.phase = 'call';
   g3.bip = 0;
   renderChips();
-  setFb3('👂 聽口令：' + g3.cmd.name + '（' + g3.cmd.pat.map(s => DRUM_TXT[s]).join('') + '）');
+  const drums = g3.cmd.pat.map(s => DRUM_TXT[s]).join('');
+  setFb3(g3.windup ? '⚠️ 怪物攻擊來了！防禦：' + drums
+                   : '👂 聽口令：' + g3.cmd.name + '（' + drums + '）',
+         g3.windup ? 'var(--bad)' : 'var(--text-2)');
   callTick(now);
 }
 function callTick(now) {
@@ -787,6 +813,7 @@ function evaluate(now) {
     }
   });
 
+  const cell = g3.pos + 1, ob = g3.obstacles[cell];
   if (ok) {
     g3.combo++;
     g3.fever = g3.combo >= 3;
@@ -795,10 +822,20 @@ function evaluate(now) {
     g3.score += pts;
     $('score3').textContent = g3.score;
     bumpTotal(pts);
-    const ob = g3.obstacles[g3.pos + 1];
-    if (g3.cmd.key !== 'march' && ob) {
-      setFb3(OBSTACLE[ob].win + ' +' + pts, 'var(--good)');
-      delete g3.obstacles[g3.pos + 1];
+    if (g3.windup) {
+      // 防禦成功，擋住怪物攻擊
+      g3.windup = false;
+      setFb3('🛡️ 擋住攻擊！+' + pts, 'var(--good)');
+    } else if (ob && g3.cmd.key !== 'march') {
+      g3.obHp[cell]--;
+      if (g3.obHp[cell] <= 0) {
+        delete g3.obstacles[cell];
+        setFb3(OBSTACLE[ob].win + ' +' + pts, 'var(--good)');
+      } else {
+        g3.windup = true;
+        alarmSound();
+        setFb3(OBSTACLE[ob].hit + ' 💢 牠要反擊了，準備防禦！', 'var(--ok)');
+      }
     } else {
       g3.pos++;
       setFb3('👣 前進！+' + pts, 'var(--good)');
@@ -806,6 +843,8 @@ function evaluate(now) {
     renderLane();
     if (g3.pos >= GOAL) { g3win(); return; }
   } else {
+    const failMsg = g3.windup ? '👾 防禦失敗，被打到了！' : '💔 沒對上！';
+    g3.windup = false;
     g3.combo = 0;
     g3.fever = false;
     $('fever').style.display = 'none';
@@ -814,7 +853,7 @@ function evaluate(now) {
     if (g3.pos > 0) g3.pos--;
     renderLane();
     if (g3.hp <= 0) { g3lose(); return; }
-    setFb3('💔 沒對上！退一步，再聽一次！', 'var(--bad)');
+    setFb3(failMsg + ' 退一步，再聽一次！', 'var(--bad)');
   }
   $('combo3').textContent = g3.combo;
   startCall(now);
@@ -868,8 +907,9 @@ document.addEventListener('keydown', e => {
 function g3start() {
   ensureCtx();
   g3.running = true;
-  g3.pos = 0; g3.combo = 0; g3.fever = false; g3.hp = MAX_HP;
+  g3.pos = 0; g3.combo = 0; g3.fever = false; g3.hp = MAX_HP; g3.windup = false;
   g3.obstacles = { 3: 'monster', 5: 'rock', 7: 'monster', 9: 'boss' };
+  g3.obHp = { 3: OBSTACLE.monster.hp, 5: OBSTACLE.rock.hp, 7: OBSTACLE.monster.hp, 9: OBSTACLE.boss.hp };
   g3.score = 0; g3.counts = {}; g3.phase = 'count'; g3.bip = 0;
   renderHp();
   $('sum3').style.display = 'none';
