@@ -133,6 +133,7 @@
     background: var(--surface-alt);
     border-radius: 6px;
   }
+  .hp { text-align: center; font-size: 18px; letter-spacing: 3px; margin-bottom: 0.5rem; }
   .fever {
     display: none;
     text-align: center;
@@ -155,9 +156,9 @@
   .chip.good { background: var(--good);   border-color: var(--good);   color: #fff; }
   .chip.ok   { background: var(--ok);     border-color: var(--ok);     color: #fff; }
   .chip.bad  { background: var(--bad);    border-color: var(--bad);    color: #fff; }
-  .pad { display: flex; gap: 12px; margin-bottom: 0.75rem; }
+  .pad { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 0.75rem; }
   .pad button {
-    flex: 1; height: 120px;
+    height: 96px;
     font-size: 28px; font-weight: 700;
     border-radius: 12px;
     position: relative;
@@ -165,8 +166,10 @@
     -webkit-user-select: none;
     user-select: none;
   }
-  #btnDon { color: #8A5A00; }
-  #btnDa  { color: var(--accent); }
+  #btnPata  { color: #B45309; border-color: #B45309; }
+  #btnPon   { color: var(--accent); border-color: var(--accent); }
+  #btnChaka { color: var(--good); border-color: var(--good); }
+  #btnDon   { color: var(--bad); border-color: var(--bad); }
   .start-wide { width: 100%; margin-bottom: 0.75rem; }
   @keyframes popfly {
     0%   { opacity: 0; transform: translate(-50%, -50%) scale(.4); }
@@ -196,7 +199,7 @@
     <button class="mode-card" data-go="game3">
       <div class="emoji">🐤</div>
       <div class="name">節奏小勇士</div>
-      <div class="desc">Patapon 式！聽 4 拍鼓語口令（咚咚咚答＝前進），照著打回去，帶小雞打怪衝終點。</div>
+      <div class="desc">Patapon 式！四顆鼓（啪碰恰咚），聽 4 拍口令照著打，帶小雞打怪、擋落石、衝終點。</div>
     </button>
   </section>
 
@@ -267,22 +270,25 @@
     <div class="tempo-term" id="term3">Andante 行板</div>
 
     <div class="lane" id="lane"></div>
+    <div class="hp" id="hp3">❤️❤️❤️</div>
     <div class="fever" id="fever">🔥 FEVER！分數 ×2 🔥</div>
     <div class="chips" id="chips"></div>
 
     <div class="stats stats-3">
       <div class="stat"><div class="lbl">分數</div><div class="val" id="score3">0</div></div>
       <div class="stat"><div class="lbl">口令連擊</div><div class="val" id="combo3">0</div></div>
-      <div class="stat"><div class="lbl">怪物</div><div class="val" id="mons3">2</div></div>
+      <div class="stat"><div class="lbl">障礙</div><div class="val" id="mons3">4</div></div>
     </div>
     <div class="total">累計總分 <b id="total3">0</b></div>
     <div class="summary" id="sum3"></div>
 
-    <div class="fb" id="fb3">聽 4 拍口令，照著打回去！咚咚咚答＝前進、答答咚答＝攻擊</div>
+    <div class="fb" id="fb3">聽 4 拍口令，照著打回去！啪啪啪碰＝前進</div>
 
     <div class="pad">
+      <button id="btnPata">啪</button>
+      <button id="btnPon">碰</button>
+      <button id="btnChaka">恰</button>
       <button id="btnDon">咚</button>
-      <button id="btnDa">答</button>
     </div>
     <button class="start-wide" id="startBtn3">開始冒險</button>
     <div class="center"><button id="stopBtn3" style="display:none">不玩了</button></div>
@@ -620,14 +626,26 @@ function g2stop(showResult) {
 $('stopBtn2').addEventListener('click', () => g2stop(true));
 
 // ---------- 模式三：節奏小勇士（Patapon 式） ----------
-const CMD_MARCH  = { key: 'march',  name: '前進', pat: ['don', 'don', 'don', 'da'] };
-const CMD_ATTACK = { key: 'attack', name: '攻擊', pat: ['da', 'da', 'don', 'da'] };
-const DRUM_TXT = { don: '咚', da: '答' };
+const CMD_MARCH  = { key: 'march',  name: '前進', pat: ['pata', 'pata', 'pata', 'pon'] };
+const CMD_ATTACK = { key: 'attack', name: '攻擊', pat: ['pon', 'pon', 'pata', 'pon'] };
+const CMD_DEFEND = { key: 'defend', name: '防禦', pat: ['chaka', 'chaka', 'pata', 'pon'] };
+const CMD_CHARGE = { key: 'charge', name: '衝鋒', pat: ['don', 'don', 'chaka', 'chaka'] };
+const DRUM_TXT = { pata: '啪', pon: '碰', chaka: '恰', don: '咚' };
+const OBSTACLE = {
+  monster: { emoji: '👾', cmd: CMD_ATTACK, win: '⚔️ 打倒怪物！' },
+  rock:    { emoji: '🪨', cmd: CMD_DEFEND, win: '🛡️ 擋住落石！' },
+  boss:    { emoji: '👹', cmd: CMD_CHARGE, win: '💥 衝鋒！打飛大魔王！' },
+};
 const GOAL = 10;
 
+const MAX_HP = 3;
 let g3 = { running: false, bpm: 88, timer: null, phase: 'idle', bip: 0, cmd: CMD_MARCH,
-           pos: 0, monsters: [], combo: 0, fever: false, score: 0, counts: {},
-           slots: [], respStart: 0 };
+           pos: 0, obstacles: {}, combo: 0, fever: false, score: 0, counts: {},
+           slots: [], respStart: 0, hp: MAX_HP };
+
+function renderHp() {
+  $('hp3').textContent = '❤️'.repeat(g3.hp) + '🖤'.repeat(MAX_HP - g3.hp);
+}
 bindSlider('bpm3', 'bpmOut3', 'term3', v => g3.bpm = v);
 $('total3').textContent = localStorage.getItem(TOTAL_KEY) || '0';
 
@@ -636,19 +654,24 @@ function setFb3(text, color) {
   $('fb3').style.color = color || 'var(--text-2)';
 }
 
+// 四顆鼓四種音色：啪＝中鼓、碰＝清亮短音、恰＝高音鈸、咚＝大鼓
+const DRUM_SOUND = {
+  pata:  { wave: 'square',   f0: 300,  f1: 180, dur: 0.12, gain: 0.22 },
+  pon:   { wave: 'sine',     f0: 520,  f1: 520, dur: 0.12, gain: 0.32 },
+  chaka: { wave: 'triangle', f0: 1250, f1: 900, dur: 0.06, gain: 0.28 },
+  don:   { wave: 'sine',     f0: 140,  f1: 70,  dur: 0.20, gain: 0.42 },
+};
 function drum(s) {
   if (!ctx) return;
+  const d = DRUM_SOUND[s];
   const o = ctx.createOscillator(), g = ctx.createGain();
-  if (s === 'don') {
-    o.frequency.setValueAtTime(180, ctx.currentTime);
-    o.frequency.exponentialRampToValueAtTime(90, ctx.currentTime + 0.12);
-  } else {
-    o.frequency.value = 740;
-  }
-  g.gain.setValueAtTime(0.35, ctx.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (s === 'don' ? 0.15 : 0.09));
+  o.type = d.wave;
+  o.frequency.setValueAtTime(d.f0, ctx.currentTime);
+  if (d.f1 !== d.f0) o.frequency.exponentialRampToValueAtTime(d.f1, ctx.currentTime + d.dur);
+  g.gain.setValueAtTime(d.gain, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + d.dur);
   o.connect(g); g.connect(ctx.destination);
-  o.start(); o.stop(ctx.currentTime + 0.16);
+  o.start(); o.stop(ctx.currentTime + d.dur + 0.01);
 }
 function tickSoft() {
   if (!ctx) return;
@@ -678,10 +701,11 @@ function renderLane() {
   for (let i = 0; i <= GOAL; i++) {
     const c = document.createElement('div');
     c.className = 'cell';
-    c.textContent = i === g3.pos ? '🐤' : g3.monsters.includes(i) ? '👾' : i === GOAL ? '🚩' : '';
+    const ob = g3.obstacles[i];
+    c.textContent = i === g3.pos ? '🐤' : ob ? OBSTACLE[ob].emoji : i === GOAL ? '🚩' : '';
     lane.appendChild(c);
   }
-  $('mons3').textContent = g3.monsters.length;
+  $('mons3').textContent = Object.keys(g3.obstacles).length;
 }
 function renderChips() {
   const el = $('chips');
@@ -696,7 +720,8 @@ function renderChips() {
 const chipEls = () => [...$('chips').children];
 
 function requiredCmd() {
-  return g3.monsters.includes(g3.pos + 1) ? CMD_ATTACK : CMD_MARCH;
+  const ob = g3.obstacles[g3.pos + 1];
+  return ob ? OBSTACLE[ob].cmd : CMD_MARCH;
 }
 
 function startCall(now) {
@@ -770,9 +795,10 @@ function evaluate(now) {
     g3.score += pts;
     $('score3').textContent = g3.score;
     bumpTotal(pts);
-    if (g3.cmd.key === 'attack') {
-      g3.monsters = g3.monsters.filter(m => m !== g3.pos + 1);
-      setFb3('⚔️ 打倒怪物！+' + pts, 'var(--good)');
+    const ob = g3.obstacles[g3.pos + 1];
+    if (g3.cmd.key !== 'march' && ob) {
+      setFb3(OBSTACLE[ob].win + ' +' + pts, 'var(--good)');
+      delete g3.obstacles[g3.pos + 1];
     } else {
       g3.pos++;
       setFb3('👣 前進！+' + pts, 'var(--good)');
@@ -783,10 +809,28 @@ function evaluate(now) {
     g3.combo = 0;
     g3.fever = false;
     $('fever').style.display = 'none';
-    setFb3('哎呀，沒對上，再聽一次！', 'var(--ok)');
+    g3.hp--;
+    renderHp();
+    if (g3.pos > 0) g3.pos--;
+    renderLane();
+    if (g3.hp <= 0) { g3lose(); return; }
+    setFb3('💔 沒對上！退一步，再聽一次！', 'var(--bad)');
   }
   $('combo3').textContent = g3.combo;
   startCall(now);
+}
+
+function g3lose() {
+  clearInterval(g3.timer);
+  g3.running = false;
+  g3.phase = 'idle';
+  caughtSound();
+  renderSummary('sum3', g3.counts);
+  setFb3('😵 體力用完了！這輪拿了 ' + g3.score + ' 分，再挑戰一次！', 'var(--bad)');
+  $('startBtn3').textContent = '再挑戰一次';
+  $('startBtn3').style.display = 'block';
+  $('stopBtn3').style.display = 'none';
+  $('fever').style.display = 'none';
 }
 
 function pad(btn) {
@@ -807,21 +851,27 @@ function pad(btn) {
   g3.counts[grade.text] = (g3.counts[grade.text] || 0) + 1;
 
   chipEls()[slot].className = 'chip ' + (grade.hit ? 'good' : grade.text === 'GOOD' ? 'ok' : 'bad');
-  spawnPop(btn === 'don' ? $('btnDon') : $('btnDa'), grade.text, grade.color, 0, 0);
+  const PAD_BTN = { pata: 'btnPata', pon: 'btnPon', chaka: 'btnChaka', don: 'btnDon' };
+  spawnPop($(PAD_BTN[btn]), grade.text, grade.color, 0, 0);
 }
+$('btnPata').addEventListener('click', () => pad('pata'));
+$('btnPon').addEventListener('click', () => pad('pon'));
+$('btnChaka').addEventListener('click', () => pad('chaka'));
 $('btnDon').addEventListener('click', () => pad('don'));
-$('btnDa').addEventListener('click', () => pad('da'));
+const KEY_DRUM = { d: 'pata', f: 'pon', j: 'chaka', k: 'don' };
 document.addEventListener('keydown', e => {
   if (!$('game3').classList.contains('active') || e.repeat) return;
-  if (e.key === 'f' || e.key === 'F') pad('don');
-  if (e.key === 'j' || e.key === 'J') pad('da');
+  const s = KEY_DRUM[e.key.toLowerCase()];
+  if (s) pad(s);
 });
 
 function g3start() {
   ensureCtx();
   g3.running = true;
-  g3.pos = 0; g3.monsters = [4, 8]; g3.combo = 0; g3.fever = false;
+  g3.pos = 0; g3.combo = 0; g3.fever = false; g3.hp = MAX_HP;
+  g3.obstacles = { 3: 'monster', 5: 'rock', 7: 'monster', 9: 'boss' };
   g3.score = 0; g3.counts = {}; g3.phase = 'count'; g3.bip = 0;
+  renderHp();
   $('sum3').style.display = 'none';
   $('fever').style.display = 'none';
   $('score3').textContent = '0';
