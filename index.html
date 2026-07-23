@@ -125,6 +125,49 @@
     padding: 10px;
     margin-bottom: 0.75rem;
   }
+  .lane { display: flex; gap: 2px; justify-content: center; margin-bottom: 0.75rem; }
+  .cell {
+    width: 30px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    background: var(--surface-alt);
+    border-radius: 6px;
+  }
+  .fever {
+    display: none;
+    text-align: center;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 2px;
+    margin-bottom: 0.5rem;
+  }
+  .chips { display: flex; gap: 8px; justify-content: center; margin-bottom: 0.75rem; min-height: 44px; }
+  .chip {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 700;
+    transition: all .1s;
+  }
+  .chip.on   { background: var(--accent); border-color: var(--accent); color: #fff; transform: scale(1.12); }
+  .chip.good { background: var(--good);   border-color: var(--good);   color: #fff; }
+  .chip.ok   { background: var(--ok);     border-color: var(--ok);     color: #fff; }
+  .chip.bad  { background: var(--bad);    border-color: var(--bad);    color: #fff; }
+  .pad { display: flex; gap: 12px; margin-bottom: 0.75rem; }
+  .pad button {
+    flex: 1; height: 120px;
+    font-size: 28px; font-weight: 700;
+    border-radius: 12px;
+    position: relative;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #btnDon { color: #8A5A00; }
+  #btnDa  { color: var(--accent); }
+  .start-wide { width: 100%; margin-bottom: 0.75rem; }
   @keyframes popfly {
     0%   { opacity: 0; transform: translate(-50%, -50%) scale(.4); }
     18%  { opacity: 1; transform: translate(-50%, -50%) scale(1.3); }
@@ -149,6 +192,11 @@
       <div class="emoji">🙈</div>
       <div class="name">節拍器躲貓貓</div>
       <div class="desc">節拍器響 4 拍就躲起來。心裡數拍子繼續點，別被抓到！看你能撐幾拍。</div>
+    </button>
+    <button class="mode-card" data-go="game3">
+      <div class="emoji">🐤</div>
+      <div class="name">節奏小勇士</div>
+      <div class="desc">Patapon 式！聽 4 拍鼓語口令（咚咚咚答＝前進），照著打回去，帶小雞打怪衝終點。</div>
     </button>
   </section>
 
@@ -204,6 +252,40 @@
 
     <button class="tap-btn" id="tapBtn2">開始</button>
     <div class="center"><button id="stopBtn2" style="display:none">不玩了</button></div>
+  </section>
+
+  <!-- 模式三：節奏小勇士（Patapon 式） -->
+  <section id="game3" class="screen">
+    <button class="back" data-go="menu">← 回選單</button>
+    <h1>節奏小勇士</h1>
+
+    <div class="row">
+      <label for="bpm3">速度</label>
+      <input type="range" id="bpm3" min="0" max="29" step="1" value="18">
+      <span class="bpm-out" id="bpmOut3">88 BPM</span>
+    </div>
+    <div class="tempo-term" id="term3">Andante 行板</div>
+
+    <div class="lane" id="lane"></div>
+    <div class="fever" id="fever">🔥 FEVER！分數 ×2 🔥</div>
+    <div class="chips" id="chips"></div>
+
+    <div class="stats stats-3">
+      <div class="stat"><div class="lbl">分數</div><div class="val" id="score3">0</div></div>
+      <div class="stat"><div class="lbl">口令連擊</div><div class="val" id="combo3">0</div></div>
+      <div class="stat"><div class="lbl">怪物</div><div class="val" id="mons3">2</div></div>
+    </div>
+    <div class="total">累計總分 <b id="total3">0</b></div>
+    <div class="summary" id="sum3"></div>
+
+    <div class="fb" id="fb3">聽 4 拍口令，照著打回去！咚咚咚答＝前進、答答咚答＝攻擊</div>
+
+    <div class="pad">
+      <button id="btnDon">咚</button>
+      <button id="btnDa">答</button>
+    </div>
+    <button class="start-wide" id="startBtn3">開始冒險</button>
+    <div class="center"><button id="stopBtn3" style="display:none">不玩了</button></div>
   </section>
 
 </main>
@@ -319,7 +401,7 @@ function resetDots(dots) {
 // ---------- 畫面切換 ----------
 document.querySelectorAll('[data-go]').forEach(btn => {
   btn.addEventListener('click', () => {
-    g1stop(false); g2stop(false);
+    g1stop(false); g2stop(false); g3stop(false);
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     $(btn.dataset.go).classList.add('active');
   });
@@ -328,6 +410,14 @@ document.querySelectorAll('[data-go]').forEach(btn => {
 // ---------- 模式一：打拍子挑戰 ----------
 const POINTS = { PERFECT: 100, GREAT: 60, GOOD: 20, MISS: 0 };
 const TOTAL_KEY = 'tempokid-total-score';
+
+function bumpTotal(pts) {
+  const oldTotal = +(localStorage.getItem(TOTAL_KEY) || 0);
+  const newTotal = oldTotal + pts;
+  localStorage.setItem(TOTAL_KEY, newTotal);
+  ['total1', 'total3'].forEach(id => { const el = $(id); if (el) el.textContent = newTotal; });
+  return { oldTotal, newTotal };
+}
 
 let g1 = { running: false, bpm: 88, beatTimes: [], beatIdx: 0, timer: null, streak: 0, results: [], score: 0 };
 const dots1 = makeDots($('dots1'));
@@ -341,10 +431,7 @@ function addPoints(grade, streak) {
   const mult = 1 + 0.1 * Math.min(Math.max(streak - 1, 0), 10);
   const pts = Math.round(base * mult / 10) * 10;
   g1.score += pts;
-  const oldTotal = +(localStorage.getItem(TOTAL_KEY) || 0);
-  const newTotal = oldTotal + pts;
-  localStorage.setItem(TOTAL_KEY, newTotal);
-  $('total1').textContent = newTotal;
+  const { oldTotal, newTotal } = bumpTotal(pts);
   if (Math.floor(newTotal / 1000) > Math.floor(oldTotal / 1000)) {
     $('fb1').textContent = '🎉 累計突破 ' + Math.floor(newTotal / 1000) * 1000 + ' 分！';
     $('fb1').style.color = 'var(--accent)';
@@ -531,6 +618,249 @@ function g2stop(showResult) {
   }
 }
 $('stopBtn2').addEventListener('click', () => g2stop(true));
+
+// ---------- 模式三：節奏小勇士（Patapon 式） ----------
+const CMD_MARCH  = { key: 'march',  name: '前進', pat: ['don', 'don', 'don', 'da'] };
+const CMD_ATTACK = { key: 'attack', name: '攻擊', pat: ['da', 'da', 'don', 'da'] };
+const DRUM_TXT = { don: '咚', da: '答' };
+const GOAL = 10;
+
+let g3 = { running: false, bpm: 88, timer: null, phase: 'idle', bip: 0, cmd: CMD_MARCH,
+           pos: 0, monsters: [], combo: 0, fever: false, score: 0, counts: {},
+           slots: [], respStart: 0 };
+bindSlider('bpm3', 'bpmOut3', 'term3', v => g3.bpm = v);
+$('total3').textContent = localStorage.getItem(TOTAL_KEY) || '0';
+
+function setFb3(text, color) {
+  $('fb3').textContent = text;
+  $('fb3').style.color = color || 'var(--text-2)';
+}
+
+function drum(s) {
+  if (!ctx) return;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  if (s === 'don') {
+    o.frequency.setValueAtTime(180, ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(90, ctx.currentTime + 0.12);
+  } else {
+    o.frequency.value = 740;
+  }
+  g.gain.setValueAtTime(0.35, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (s === 'don' ? 0.15 : 0.09));
+  o.connect(g); g.connect(ctx.destination);
+  o.start(); o.stop(ctx.currentTime + 0.16);
+}
+function tickSoft() {
+  if (!ctx) return;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.frequency.value = 500;
+  g.gain.setValueAtTime(0.07, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(); o.stop(ctx.currentTime + 0.06);
+}
+function winSound() {
+  if (!ctx) return;
+  [392, 523, 659, 784].forEach((f, i) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    const t0 = ctx.currentTime + i * 0.15;
+    o.frequency.value = f;
+    g.gain.setValueAtTime(0.22, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.25);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t0); o.stop(t0 + 0.26);
+  });
+}
+
+function renderLane() {
+  const lane = $('lane');
+  lane.innerHTML = '';
+  for (let i = 0; i <= GOAL; i++) {
+    const c = document.createElement('div');
+    c.className = 'cell';
+    c.textContent = i === g3.pos ? '🐤' : g3.monsters.includes(i) ? '👾' : i === GOAL ? '🚩' : '';
+    lane.appendChild(c);
+  }
+  $('mons3').textContent = g3.monsters.length;
+}
+function renderChips() {
+  const el = $('chips');
+  el.innerHTML = '';
+  g3.cmd.pat.forEach(s => {
+    const d = document.createElement('div');
+    d.className = 'chip';
+    d.textContent = DRUM_TXT[s];
+    el.appendChild(d);
+  });
+}
+const chipEls = () => [...$('chips').children];
+
+function requiredCmd() {
+  return g3.monsters.includes(g3.pos + 1) ? CMD_ATTACK : CMD_MARCH;
+}
+
+function startCall(now) {
+  g3.cmd = requiredCmd();
+  g3.phase = 'call';
+  g3.bip = 0;
+  renderChips();
+  setFb3('👂 聽口令：' + g3.cmd.name + '（' + g3.cmd.pat.map(s => DRUM_TXT[s]).join('') + '）');
+  callTick(now);
+}
+function callTick(now) {
+  drum(g3.cmd.pat[g3.bip]);
+  chipEls().forEach((c, i) => c.classList.toggle('on', i === g3.bip));
+  g3.bip++;
+  if (g3.bip === 4) {
+    g3.phase = 'resp';
+    g3.bip = 0;
+    g3.slots = [null, null, null, null];
+    g3.respStart = now + 60000 / g3.bpm;   // 回打的第 1 拍落點
+    setTimeout(() => {
+      chipEls().forEach(c => c.className = 'chip');
+      setFb3('🥁 換你打！', 'var(--accent)');
+    }, 60000 / g3.bpm * 0.5);
+  }
+}
+
+function g3beat() {
+  const now = performance.now();
+  if (g3.phase === 'count') {
+    if (g3.bip < 4) {
+      click(g3.bip === 0);
+      setFb3('預備… ' + (4 - g3.bip));
+      g3.bip++;
+    } else {
+      startCall(now);
+    }
+    return;
+  }
+  if (g3.phase === 'call') { callTick(now); return; }
+  if (g3.phase === 'resp') {
+    if (g3.bip < 4) {
+      tickSoft();
+      chipEls().forEach((c, i) => {
+        if (i === g3.bip && c.className === 'chip') c.classList.add('on');
+        else if (c.className === 'chip on' && i !== g3.bip) c.className = 'chip';
+      });
+      g3.bip++;
+    } else {
+      evaluate(now);
+    }
+  }
+}
+
+function evaluate(now) {
+  let ok = true;
+  g3.slots.forEach((s, i) => {
+    if (!s) {
+      ok = false;
+      g3.counts.MISS = (g3.counts.MISS || 0) + 1;
+      chipEls()[i].className = 'chip bad';
+    } else if (!s.pass) {
+      ok = false;
+    }
+  });
+
+  if (ok) {
+    g3.combo++;
+    g3.fever = g3.combo >= 3;
+    $('fever').style.display = g3.fever ? 'block' : 'none';
+    const pts = (100 + 20 * Math.min(g3.combo - 1, 5)) * (g3.fever ? 2 : 1);
+    g3.score += pts;
+    $('score3').textContent = g3.score;
+    bumpTotal(pts);
+    if (g3.cmd.key === 'attack') {
+      g3.monsters = g3.monsters.filter(m => m !== g3.pos + 1);
+      setFb3('⚔️ 打倒怪物！+' + pts, 'var(--good)');
+    } else {
+      g3.pos++;
+      setFb3('👣 前進！+' + pts, 'var(--good)');
+    }
+    renderLane();
+    if (g3.pos >= GOAL) { g3win(); return; }
+  } else {
+    g3.combo = 0;
+    g3.fever = false;
+    $('fever').style.display = 'none';
+    setFb3('哎呀，沒對上，再聽一次！', 'var(--ok)');
+  }
+  $('combo3').textContent = g3.combo;
+  startCall(now);
+}
+
+function pad(btn) {
+  if (!g3.running) return;
+  drum(btn);
+  if (g3.phase !== 'resp') return;   // 聽口令階段先不判定
+
+  const t = performance.now(), iv = 60000 / g3.bpm;
+  let slot = Math.round((t - g3.respStart) / iv);
+  if (slot < 0) slot = 0;
+  if (slot > 3) slot = 3;
+  if (g3.slots[slot]) return;
+
+  const err = t - (g3.respStart + slot * iv);
+  const correctBtn = btn === g3.cmd.pat[slot];
+  const grade = correctBtn ? GRADES.find(g => Math.abs(err) < g.max) : GRADES[3];
+  g3.slots[slot] = { btn, err, pass: correctBtn && grade.text !== 'MISS' };
+  g3.counts[grade.text] = (g3.counts[grade.text] || 0) + 1;
+
+  chipEls()[slot].className = 'chip ' + (grade.hit ? 'good' : grade.text === 'GOOD' ? 'ok' : 'bad');
+  spawnPop(btn === 'don' ? $('btnDon') : $('btnDa'), grade.text, grade.color, 0, 0);
+}
+$('btnDon').addEventListener('click', () => pad('don'));
+$('btnDa').addEventListener('click', () => pad('da'));
+document.addEventListener('keydown', e => {
+  if (!$('game3').classList.contains('active') || e.repeat) return;
+  if (e.key === 'f' || e.key === 'F') pad('don');
+  if (e.key === 'j' || e.key === 'J') pad('da');
+});
+
+function g3start() {
+  ensureCtx();
+  g3.running = true;
+  g3.pos = 0; g3.monsters = [4, 8]; g3.combo = 0; g3.fever = false;
+  g3.score = 0; g3.counts = {}; g3.phase = 'count'; g3.bip = 0;
+  $('sum3').style.display = 'none';
+  $('fever').style.display = 'none';
+  $('score3').textContent = '0';
+  $('combo3').textContent = '0';
+  $('chips').innerHTML = '';
+  renderLane();
+  $('startBtn3').style.display = 'none';
+  $('stopBtn3').style.display = 'inline-block';
+  g3beat();
+  g3.timer = setInterval(g3beat, 60000 / g3.bpm);
+}
+function g3win() {
+  clearInterval(g3.timer);
+  g3.running = false;
+  g3.phase = 'idle';
+  winSound();
+  renderSummary('sum3', g3.counts);
+  setFb3('🎉 到達終點！這輪拿了 ' + g3.score + ' 分！', 'var(--good)');
+  $('startBtn3').textContent = '再玩一次';
+  $('startBtn3').style.display = 'block';
+  $('stopBtn3').style.display = 'none';
+}
+function g3stop(showResult) {
+  if (!g3.running) return;
+  clearInterval(g3.timer);
+  g3.running = false;
+  g3.phase = 'idle';
+  $('startBtn3').textContent = '開始冒險';
+  $('startBtn3').style.display = 'block';
+  $('stopBtn3').style.display = 'none';
+  $('fever').style.display = 'none';
+  if (showResult) {
+    renderSummary('sum3', g3.counts);
+    setFb3('這輪拿了 ' + g3.score + ' 分');
+  }
+}
+$('startBtn3').addEventListener('click', g3start);
+$('stopBtn3').addEventListener('click', () => g3stop(true));
+renderLane();
 </script>
 </body>
 </html>
