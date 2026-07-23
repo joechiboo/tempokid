@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>TempoKid — 打拍子挑戰</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --surface: #FFFFFF;
+    --surface-alt: #F1EFE8;
+    --border: #D3D1C7;
+    --text: #2C2C2A;
+    --text-2: #5F5E5A;
+    --text-3: #888780;
+    --accent: #378ADD;
+    --good: #3B6D11;
+    --ok: #854F0B;
+    --bad: #A32D2D;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 1.5rem 1rem;
+  }
+  main { width: 100%; max-width: 420px; }
+  h1 { font-size: 22px; font-weight: 500; text-align: center; margin-bottom: 1.5rem; }
+  .row { display: flex; align-items: center; gap: 12px; margin-bottom: 1rem; }
+  label { font-size: 14px; color: var(--text-2); min-width: 40px; }
+  input[type=range] { flex: 1; accent-color: var(--accent); }
+  #bpmOut { font-size: 14px; font-weight: 500; min-width: 68px; text-align: right; }
+  #dots { display: flex; gap: 10px; justify-content: center; margin-bottom: 1.25rem; }
+  .dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    transition: background .1s;
+  }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 1.25rem; }
+  .stat {
+    background: var(--surface-alt);
+    border-radius: var(--radius);
+    padding: 1rem;
+    text-align: center;
+  }
+  .stat .lbl { font-size: 13px; color: var(--text-3); }
+  .stat .val { font-size: 24px; font-weight: 500; }
+  #fb { text-align: center; font-size: 15px; height: 24px; margin-bottom: 1rem; color: var(--text-2); }
+  button {
+    font-family: inherit;
+    font-size: 15px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 16px;
+    cursor: pointer;
+  }
+  button:active { transform: scale(0.98); }
+  #tapBtn {
+    width: 100%; height: 140px;
+    font-size: 20px;
+    border-radius: 12px;
+    margin-bottom: 0.75rem;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .center { display: flex; justify-content: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>打拍子挑戰</h1>
+
+  <div class="row">
+    <label for="bpm">速度</label>
+    <input type="range" id="bpm" min="0" max="29" step="1" value="16">
+    <span id="bpmOut">80 BPM</span>
+  </div>
+  <div id="tempoTerm" style="text-align:center; font-size:14px; color:var(--text-3); margin-bottom:1rem;">Andante 行板</div>
+
+  <div id="dots"></div>
+
+  <div class="stats">
+    <div class="stat"><div class="lbl">連續準確</div><div class="val" id="streak">0</div></div>
+    <div class="stat"><div class="lbl">準確率</div><div class="val" id="acc">--</div></div>
+  </div>
+
+  <div id="fb">按「開始」，先聽 4 拍，再跟著點</div>
+
+  <button id="tapBtn">開始</button>
+  <div class="center"><button id="stopBtn" style="display:none">結束並看成績</button></div>
+</main>
+
+<script>
+let ctx = null, running = false, bpm = 80;
+let beatTimes = [], beatIdx = 0, timer = null, streak = 0, results = [];
+
+const $ = id => document.getElementById(id);
+const dotsEl = $('dots');
+for (let i = 0; i < 4; i++) {
+  const d = document.createElement('div');
+  d.className = 'dot';
+  dotsEl.appendChild(d);
+}
+const dots = [...dotsEl.children];
+
+// 傳統節拍器（Maelzel）標準刻度
+const TICKS = [40,42,44,46,48,50,52,54,56,58,60,63,66,69,72,76,80,84,88,92,96,100,104,108,112,116,120,126,132,138];
+
+function tempoTerm(v) {
+  if (v < 60)  return 'Largo 最緩板';
+  if (v < 66)  return 'Larghetto 甚緩板';
+  if (v < 76)  return 'Adagio 慢板';
+  if (v < 108) return 'Andante 行板';
+  if (v < 120) return 'Moderato 中板';
+  return 'Allegro 快板';
+}
+
+$('bpm').addEventListener('input', e => {
+  bpm = TICKS[+e.target.value];
+  $('bpmOut').textContent = bpm + ' BPM';
+  $('tempoTerm').textContent = tempoTerm(bpm);
+});
+
+function click(strong) {
+  if (!ctx) return;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.frequency.value = strong ? 880 : 660;
+  g.gain.setValueAtTime(0.25, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(); o.stop(ctx.currentTime + 0.09);
+}
+
+function beat() {
+  const now = performance.now();
+  beatTimes.push(now);
+  const b = beatIdx % 4;
+  click(b === 0);
+  dots.forEach((d, i) => d.style.background = i === b ? 'var(--accent)' : 'var(--surface-alt)');
+  beatIdx++;
+  if (beatIdx === 5) $('fb').textContent = '跟著點！';
+}
+
+function judge(t) {
+  let best = 1e9;
+  for (const b of beatTimes) best = Math.min(best, Math.abs(t - b));
+  const iv = 60000 / bpm;
+  const nb = beatTimes[beatTimes.length - 1] + iv;
+  return Math.min(best, Math.abs(t - nb));
+}
+
+function setFb(text, color) {
+  $('fb').textContent = text;
+  $('fb').style.color = color || 'var(--text-2)';
+}
+
+$('tapBtn').addEventListener('click', () => {
+  if (!running) {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx.resume();
+    running = true;
+    beatTimes = []; beatIdx = 0; streak = 0; results = [];
+    $('streak').textContent = '0';
+    $('acc').textContent = '--';
+    $('tapBtn').textContent = '點這裡打拍子';
+    $('stopBtn').style.display = 'inline-block';
+    setFb('先聽 4 拍…');
+    beat();
+    timer = setInterval(beat, 60000 / bpm);
+    return;
+  }
+  if (beatIdx < 5) return;
+
+  const t = performance.now(), err = judge(t);
+  results.push(err);
+
+  if (err < 90)       { streak++; setFb('很準！', 'var(--good)'); }
+  else if (err < 160) { streak = 0; setFb('差一點點', 'var(--ok)'); }
+  else                { streak = 0; setFb('偏掉了，聽聽節拍器', 'var(--bad)'); }
+
+  $('streak').textContent = streak;
+  const hit = results.filter(e => e < 90).length;
+  $('acc').textContent = Math.round(hit / results.length * 100) + '%';
+});
+
+$('stopBtn').addEventListener('click', () => {
+  running = false;
+  clearInterval(timer);
+  $('tapBtn').textContent = '開始';
+  $('stopBtn').style.display = 'none';
+  dots.forEach(d => d.style.background = 'var(--surface-alt)');
+  if (results.length) {
+    const hit = results.filter(e => e < 90).length;
+    const pct = Math.round(hit / results.length * 100);
+    setFb(pct >= 80 ? '成績 ' + pct + '%，很穩！試試加快速度'
+        : pct >= 50 ? '成績 ' + pct + '%，再多練幾輪'
+                    : '成績 ' + pct + '%，先放慢速度試試');
+  }
+});
+</script>
+</body>
+</html>
