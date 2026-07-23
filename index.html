@@ -107,6 +107,12 @@
     animation: popfly .7s ease-out forwards;
   }
   .pop .combo { font-size: 18px; font-weight: 600; }
+  .pop .pts { display: block; font-size: 17px; font-weight: 600; text-align: center; }
+  .stats-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .stats-3 .stat { padding: 0.75rem 0.25rem; }
+  .stats-3 .stat .val { font-size: 20px; }
+  .total { text-align: center; font-size: 13px; color: var(--text-3); margin-bottom: 1rem; }
+  .total b { font-size: 15px; color: var(--text-2); }
   @keyframes popfly {
     0%   { opacity: 0; transform: translate(-50%, -50%) scale(.4); }
     18%  { opacity: 1; transform: translate(-50%, -50%) scale(1.3); }
@@ -148,10 +154,12 @@
 
     <div class="dots" id="dots1"></div>
 
-    <div class="stats">
-      <div class="stat"><div class="lbl">連續準確</div><div class="val" id="streak1">0</div></div>
+    <div class="stats stats-3">
+      <div class="stat"><div class="lbl">分數</div><div class="val" id="score1">0</div></div>
+      <div class="stat"><div class="lbl">連擊</div><div class="val" id="streak1">0</div></div>
       <div class="stat"><div class="lbl">準確率</div><div class="val" id="acc1">--</div></div>
     </div>
+    <div class="total">累計總分 <b id="total1">0</b></div>
 
     <div class="fb" id="fb1">按「開始」，先聽 4 拍，再跟著點</div>
 
@@ -251,7 +259,7 @@ function judge(t, beatTimes, bpm) {
   if (Math.abs(t - nb) < Math.abs(best)) best = t - nb;
   return best;
 }
-function spawnPop(btn, text, color, combo) {
+function spawnPop(btn, text, color, combo, pts) {
   const el = document.createElement('span');
   el.className = 'pop';
   el.style.color = color;
@@ -261,6 +269,12 @@ function spawnPop(btn, text, color, combo) {
     c.className = 'combo';
     c.textContent = ' ×' + combo;
     el.appendChild(c);
+  }
+  if (pts > 0) {
+    const p = document.createElement('span');
+    p.className = 'pts';
+    p.textContent = '+' + pts;
+    el.appendChild(p);
   }
   el.style.marginLeft = (Math.random() * 24 - 12) + 'px';
   btn.appendChild(el);
@@ -291,9 +305,31 @@ document.querySelectorAll('[data-go]').forEach(btn => {
 });
 
 // ---------- 模式一：打拍子挑戰 ----------
-let g1 = { running: false, bpm: 88, beatTimes: [], beatIdx: 0, timer: null, streak: 0, results: [] };
+const POINTS = { PERFECT: 100, GREAT: 60, GOOD: 20, MISS: 0 };
+const TOTAL_KEY = 'tempokid-total-score';
+
+let g1 = { running: false, bpm: 88, beatTimes: [], beatIdx: 0, timer: null, streak: 0, results: [], score: 0 };
 const dots1 = makeDots($('dots1'));
 bindSlider('bpm1', 'bpmOut1', 'term1', v => g1.bpm = v);
+$('total1').textContent = localStorage.getItem(TOTAL_KEY) || '0';
+
+function addPoints(grade, streak) {
+  const base = POINTS[grade.text];
+  if (!base) return 0;
+  // 連擊加成：每連 1 次 +10%，最高 2 倍
+  const mult = 1 + 0.1 * Math.min(Math.max(streak - 1, 0), 10);
+  const pts = Math.round(base * mult / 10) * 10;
+  g1.score += pts;
+  const oldTotal = +(localStorage.getItem(TOTAL_KEY) || 0);
+  const newTotal = oldTotal + pts;
+  localStorage.setItem(TOTAL_KEY, newTotal);
+  $('total1').textContent = newTotal;
+  if (Math.floor(newTotal / 1000) > Math.floor(oldTotal / 1000)) {
+    $('fb1').textContent = '🎉 累計突破 ' + Math.floor(newTotal / 1000) * 1000 + ' 分！';
+    $('fb1').style.color = 'var(--accent)';
+  }
+  return pts;
+}
 
 function g1beat() {
   g1.beatTimes.push(performance.now());
@@ -308,7 +344,8 @@ $('tapBtn1').addEventListener('click', () => {
   if (!g1.running) {
     ensureCtx();
     g1.running = true;
-    g1.beatTimes = []; g1.beatIdx = 0; g1.streak = 0; g1.results = [];
+    g1.beatTimes = []; g1.beatIdx = 0; g1.streak = 0; g1.results = []; g1.score = 0;
+    $('score1').textContent = '0';
     $('streak1').textContent = '0';
     $('acc1').textContent = '--';
     $('tapBtn1').textContent = '點這裡打拍子';
@@ -327,10 +364,12 @@ $('tapBtn1').addEventListener('click', () => {
 
   const grade = GRADES.find(g => err < g.max);
   if (grade.hit) g1.streak++; else g1.streak = 0;
-  spawnPop($('tapBtn1'), grade.text, grade.color, g1.streak);
+  const pts = addPoints(grade, g1.streak);
+  spawnPop($('tapBtn1'), grade.text, grade.color, g1.streak, pts);
+  $('score1').textContent = g1.score;
 
   if (grade.hit) {
-    $('fb1').textContent = '';
+    if (!$('fb1').textContent.startsWith('🎉')) $('fb1').textContent = '';
   } else {
     $('fb1').textContent = diff < 0 ? '🐢 搶拍了，慢一點' : '🐇 慢半拍了，快一點';
     $('fb1').style.color = 'var(--ok)';
@@ -351,10 +390,12 @@ function g1stop(showResult) {
   if (showResult && g1.results.length) {
     const hit = g1.results.filter(e => e < 90).length;
     const pct = Math.round(hit / g1.results.length * 100);
+    const tail = '，這輪拿了 ' + g1.score + ' 分';
     $('fb1').textContent =
-      pct >= 80 ? '成績 ' + pct + '%，很穩！試試加快速度'
-      : pct >= 50 ? '成績 ' + pct + '%，再多練幾輪'
-                  : '成績 ' + pct + '%，先放慢速度試試';
+      pct >= 80 ? '準確率 ' + pct + '%' + tail + '，很穩！試試加快速度'
+      : pct >= 50 ? '準確率 ' + pct + '%' + tail + '，再多練幾輪'
+                  : '準確率 ' + pct + '%' + tail + '，先放慢速度試試';
+    $('fb1').style.color = 'var(--text-2)';
   }
 }
 $('stopBtn1').addEventListener('click', () => g1stop(true));
