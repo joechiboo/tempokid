@@ -136,7 +136,7 @@
     <button class="mode-card" data-go="game2">
       <div class="emoji">🙈</div>
       <div class="name">節拍器躲貓貓</div>
-      <div class="desc">節拍器響 8 拍就躲起來。心裡數拍子繼續點，別被抓到！看你能撐幾拍。</div>
+      <div class="desc">節拍器響 4 拍就躲起來。心裡數拍子繼續點，別被抓到！看你能撐幾拍。</div>
     </button>
   </section>
 
@@ -186,7 +186,7 @@
       <div class="stat"><div class="lbl">最佳紀錄</div><div class="val" id="best2">0</div></div>
     </div>
 
-    <div class="fb" id="fb2">節拍器響 8 拍後會躲起來，靠自己心裡的拍子點下去！</div>
+    <div class="fb" id="fb2">節拍器響 4 拍後會躲起來，靠自己心裡的拍子點下去！</div>
 
     <button class="tap-btn" id="tapBtn2">開始</button>
     <div class="center"><button id="stopBtn2" style="display:none">不玩了</button></div>
@@ -401,7 +401,7 @@ function g1stop(showResult) {
 $('stopBtn1').addEventListener('click', () => g1stop(true));
 
 // ---------- 模式二：節拍器躲貓貓 ----------
-const LISTEN_BEATS = 8;       // 先出聲 8 拍（2 小節）
+const LISTEN_BEATS = 4;       // 先出聲 4 拍（1 小節）
 const BEST_KEY = 'tempokid-hide-best';
 
 let g2 = { running: false, bpm: 88, beatTimes: [], beatIdx: 0, timer: null, survived: 0, taps: 0 };
@@ -446,7 +446,7 @@ $('tapBtn2').addEventListener('click', () => {
     dots2.forEach(d => d.style.display = 'block');
     $('tapBtn2').textContent = '點這裡打拍子';
     $('stopBtn2').style.display = 'inline-block';
-    setFb2('聽好喔，8 拍後節拍器就要躲起來…');
+    setFb2('聽好喔，4 拍後節拍器就要躲起來…');
     g2beat();
     g2.timer = setInterval(g2beat, 60000 / g2.bpm);
     return;
