@@ -663,11 +663,12 @@ function setFb3(text, color) {
 }
 
 // 四顆鼓四種音色：啪＝中鼓、碰＝清亮短音、恰＝高音鈸、咚＝大鼓
+// 註：手機喇叭放不出約 200Hz 以下的頻率，咚要疊一層中頻擊感才聽得到
 const DRUM_SOUND = {
   pata:  { wave: 'square',   f0: 300,  f1: 180, dur: 0.12, gain: 0.22 },
   pon:   { wave: 'sine',     f0: 520,  f1: 520, dur: 0.12, gain: 0.32 },
   chaka: { wave: 'triangle', f0: 1250, f1: 900, dur: 0.06, gain: 0.28 },
-  don:   { wave: 'sine',     f0: 140,  f1: 70,  dur: 0.20, gain: 0.42 },
+  don:   { wave: 'sine',     f0: 240,  f1: 100, dur: 0.20, gain: 0.45 },
 };
 function drum(s) {
   if (!ctx) return;
@@ -680,6 +681,17 @@ function drum(s) {
   g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + d.dur);
   o.connect(g); g.connect(ctx.destination);
   o.start(); o.stop(ctx.currentTime + d.dur + 0.01);
+  if (s === 'don') {
+    // 中頻擊感層，讓手機喇叭也聽得到咚
+    const o2 = ctx.createOscillator(), g2 = ctx.createGain();
+    o2.type = 'triangle';
+    o2.frequency.setValueAtTime(400, ctx.currentTime);
+    o2.frequency.exponentialRampToValueAtTime(180, ctx.currentTime + 0.08);
+    g2.gain.setValueAtTime(0.25, ctx.currentTime);
+    g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+    o2.connect(g2); g2.connect(ctx.destination);
+    o2.start(); o2.stop(ctx.currentTime + 0.09);
+  }
 }
 function tickSoft() {
   if (!ctx) return;
